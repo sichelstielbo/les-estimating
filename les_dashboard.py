@@ -28,6 +28,10 @@ selected_pms    = st.sidebar.multiselect("Project Manager", all_pms,    default=
 selected_scopes = st.sidebar.multiselect("Scope",           all_scopes, default=all_scopes)
 selected_states = st.sidebar.multiselect("State",           all_states, default=all_states)
 
+# City filter updates based on selected states
+available_cities = sorted(df[df['State'].isin(selected_states)]['City'].unique())
+selected_cities  = st.sidebar.multiselect("City", available_cities, default=available_cities)
+
 st.sidebar.markdown("---")
 st.sidebar.caption("Run les_extract.py to refresh data")
 
@@ -35,14 +39,22 @@ st.sidebar.caption("Run les_extract.py to refresh data")
 filtered = df[
     df['PM'].isin(selected_pms) &
     df['Scope'].isin(selected_scopes) &
-    df['State'].isin(selected_states)
+    df['State'].isin(selected_states) &
+    df['City'].isin(selected_cities)
 ]
 
 analysis = filtered[filtered['Original_Est'] > 0]
 
 # --- Header ---
-st.title("LE Schwartz & Sons")
-st.subheader("Estimating & Job Cost Dashboard")
+col_logo, col_title = st.columns([1, 4])
+with col_title:
+    st.markdown("""
+        <h1 style='color:#1F3864; margin-bottom:0'>LE Schwartz & Sons</h1>
+        <p style='color:#2E5FA3; font-size:18px; margin-top:0'>
+            Estimating & Job Cost Dashboard
+        </p>
+    """, unsafe_allow_html=True)
+
 st.markdown("---")
 
 # --- KPI Metrics ---
@@ -168,3 +180,57 @@ pm_summary['Variance $'] = pm_summary['Variance $'].apply(lambda x: f"${x:+,.0f}
 
 styled_pm = pm_summary.style.map(color_variance, subset=['Variance %'])
 st.dataframe(styled_pm, use_container_width=True, hide_index=True)
+
+st.markdown("---")
+
+# --- Job Detail View ---
+st.subheader("Job Detail")
+
+available_jobs = sorted(filtered['Job'].unique())
+
+if len(available_jobs) == 0:
+    st.warning("No jobs match the current filters.")
+else:
+    selected_job = st.selectbox("Select a job to drill into", available_jobs)
+
+    job_data = analysis[analysis['Job'] == selected_job]
+
+    if not job_data.empty:
+        # Job metadata
+        meta = job_data.iloc[0]
+        m1, m2, m3, m4 = st.columns(4)
+        m1.metric("Project Manager", meta['PM'])
+        m2.metric("Location", f"{meta['City']}, {meta['State']}")
+        m3.metric("GC", meta['GC'])
+        m4.metric("Total Scopes", str(job_data['Scope'].nunique()))
+
+        st.markdown("####  Breakdown by Scope & Category")
+
+        # Scope breakdown
+        for scope in sorted(job_data['Scope'].unique()):
+            scope_data = job_data[job_data['Scope'] == scope]
+
+            scope_est  = scope_data['Original_Est'].sum()
+            scope_proj = scope_data['Projected_Cost'].sum()
+            scope_var  = scope_est - scope_proj
+            scope_pct  = (scope_var / scope_est * 100) if scope_est > 0 else 0
+
+            color = "🟢" if scope_pct >= 0 else "🔴"
+            with st.expander(
+                f"{color} {scope}  —  "
+                f"Est: ${scope_est:,.0f}  |  "
+                f"Proj: ${scope_proj:,.0f}  |  "
+                f"Variance: {scope_pct:+.1f}%"
+            ):
+                detail = scope_data[['Category', 'Original_Est', 'Projected_Cost', 'Actual_to_Date']].copy()
+                detail.columns = ['Category', 'Estimated', 'Projected', 'Actual to Date']
+                detail['Variance $'] = detail['Estimated'] - detail['Projected']
+                detail['Variance %'] = ((detail['Variance $'] / detail['Estimated']) * 100).round(1).apply(lambda x: f"{x:+.1f}%")
+                detail['Estimated']    = detail['Estimated'].apply(lambda x: f"${x:,.0f}")
+                detail['Projected']    = detail['Projected'].apply(lambda x: f"${x:,.0f}")
+                detail['Actual to Date'] = detail['Actual to Date'].apply(lambda x: f"${x:,.0f}")
+                detail['Variance $']   = detail['Variance $'].apply(lambda x: f"${x:+,.0f}")
+                detail = detail.reset_index(drop=True)
+
+                styled_detail = detail.style.map(color_variance, subset=['Variance %'])
+                st.dataframe(styled_detail, use_container_width=True, hide_index=True)
