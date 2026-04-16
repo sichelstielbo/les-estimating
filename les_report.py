@@ -130,7 +130,6 @@ kpis = [
     ('Total Projected',      f"${df['Projected_Cost'].sum():,.0f}"),
     ('Overall Variance',     f"${df['Original_Est'].sum() - df['Projected_Cost'].sum():+,.0f}"),
     ('Scopes Tracked',       str(len(df['Scope'].unique()))),
-    ('Project Managers',     '3'),
 ]
 for i, (label, val) in enumerate(kpis):
     col = i + 1
@@ -156,31 +155,6 @@ for i, (pm, row) in enumerate(pm_summary.iterrows()):
     apply_variance_row(ws1, r, row)
 ws1.row_dimensions[9 + len(pm_summary)].height = 10
 
-# Key findings
-last_pm_row = 9 + len(pm_summary)
-notes_row   = last_pm_row + 2
-section_header(ws1, notes_row, 'Key Findings')
-
-over_scopes  = scope_summary[scope_summary['Variance_%'] < -2]
-under_scopes = scope_summary[scope_summary['Variance_%'] > 5]
-
-findings = [
-    "• Most estimates are accurate — overall portfolio variance is within ±5% for major scopes.",
-    f"• Scopes most consistently OVER budget: {', '.join(over_scopes.index.tolist()) if len(over_scopes) else 'None significant'}.",
-    f"• Scopes most consistently UNDER budget: {', '.join(under_scopes.index.tolist()) if len(under_scopes) else 'None significant'}.",
-    "• Nick Riner is the only PM currently running over budget (-1.7% across 13 jobs).",
-    "• 'Gutter' and 'Gutters' appear as separate scopes — recommend standardizing scope names in source files.",
-]
-for j, finding in enumerate(findings):
-    fr = notes_row + 1 + j
-    ws1.merge_cells(f'A{fr}:F{fr}')
-    c = ws1[f'A{fr}']
-    c.value = finding
-    c.font  = Font(name='Arial', size=10)
-    c.fill  = fill(WHITE if j % 2 == 0 else GRAY)
-    c.alignment = Alignment(horizontal='left', vertical='center', indent=1, wrap_text=True)
-    c.border = thin_border()
-    ws1.row_dimensions[fr].height = 32
 
 for col, w in enumerate([28, 20, 22, 22, 16, 18], 1):
     set_col_width(ws1, col, w)
@@ -212,29 +186,20 @@ ws2[f'A{note_r}'].alignment = Alignment(horizontal='left', indent=1)
 for col, w in enumerate([30, 10, 22, 22, 16, 12], 1):
     set_col_width(ws2, col, w)
 
-# --- SHEET 3: BY PM ---
-ws3 = wb.create_sheet('By PM')
+# --- SHEET 3: BY COST CATEGORY ---
+ws3 = wb.create_sheet('By Cost Category')
 ws3.sheet_view.showGridLines = False
 
 ws3.merge_cells('A1:F1')
-ws3['A1'].value = 'Variance Analysis by Project Manager'
+ws3['A1'].value = 'Variance by Cost Category'
 ws3['A1'].font  = Font(name='Arial', bold=True, size=14, color=WHITE)
 ws3['A1'].fill  = fill(DARK_BLUE)
 ws3['A1'].alignment = Alignment(horizontal='center', vertical='center')
 ws3.row_dimensions[1].height = 30
 
-write_header_row(ws3, 2, ['Project Manager'] + VARIANCE_HEADERS[1:])
-for i, (pm, row) in enumerate(pm_summary.iterrows()):
-    r  = 3 + i
-    bg = LIGHT_RED if row['Variance_%'] < 0 else LIGHT_GRN
-    write_data_row(ws3, r, variance_row_values(pm, row), bg=bg)
-    apply_variance_row(ws3, r, row)
-
-cat_row = 3 + len(pm_summary) + 2
-section_header(ws3, cat_row, 'Variance by Cost Category (across all PMs)')
-write_header_row(ws3, cat_row + 1, ['Category'] + VARIANCE_HEADERS[1:])
+write_header_row(ws3, 2, ['Category'] + VARIANCE_HEADERS[1:])
 for i, (cat, row) in enumerate(category_summary.iterrows()):
-    r  = cat_row + 2 + i
+    r  = 3 + i
     bg = LIGHT_RED if row['Variance_%'] < 0 else (LIGHT_GRN if row['Variance_%'] > 3 else WHITE)
     write_data_row(ws3, r, variance_row_values(cat, row), bg=bg)
     apply_variance_row(ws3, r, row)
